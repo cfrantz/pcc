@@ -74,4 +74,4 @@ TODO
 * Error conditions
 * Consume parse tree and translate to another form (e.g. assembly)
 
-# vim: ts=4 sts=4 sw=4 expandtab:
+vim: ts=4 sts=4 sw=4 expandtab:
