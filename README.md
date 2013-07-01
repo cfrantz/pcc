@@ -27,44 +27,44 @@ Input:
 Output:
 -------
 
-<c:nodes xmlns:c="urn:c-ast" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <c:node>
-    <c:function>
-      <c:signature>
-        <c:name>main</c:name>
-        <c:type>function</c:type>
-        <c:signature>
-          <c:sig>
-            <c:type>void</c:type>
-          </c:sig>
-        </c:signature>
-      </c:signature>
-      <c:rtype>
-        <c:type>int</c:type>
-      </c:rtype>
-      <c:body>
-        <c:stmt xsi:type="ns0:Declarator">
-          <c:name>i</c:name>
-          <c:type>int</c:type>
-          <c:initializer xsi:type="ns0:Integer">
-            <c:value>7</c:value>
-          </c:initializer>
-        </c:stmt>
-        <c:stmt xsi:type="ns0:Call">
-          <c:function xsi:type="ns0:Identifier">
-            <c:name>printf</c:name>
-          </c:function>
-          <c:arguments xsi:type="ns0:String">
-            <c:value>Hello %d\n</c:value>
-          </c:arguments>
-          <c:arguments xsi:type="ns0:Identifier">
-            <c:name>i</c:name>
-          </c:arguments>
-        </c:stmt>
-      </c:body>
-    </c:function>
-  </c:node>
-</c:nodes>
+    <c:nodes xmlns:c="urn:c-ast" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <c:node>
+        <c:function>
+          <c:signature>
+            <c:name>main</c:name>
+            <c:type>function</c:type>
+            <c:signature>
+              <c:sig>
+                <c:type>void</c:type>
+              </c:sig>
+            </c:signature>
+          </c:signature>
+          <c:rtype>
+            <c:type>int</c:type>
+          </c:rtype>
+          <c:body>
+            <c:stmt xsi:type="ns0:Declarator">
+              <c:name>i</c:name>
+              <c:type>int</c:type>
+              <c:initializer xsi:type="ns0:Integer">
+                <c:value>7</c:value>
+              </c:initializer>
+            </c:stmt>
+            <c:stmt xsi:type="ns0:Call">
+              <c:function xsi:type="ns0:Identifier">
+                <c:name>printf</c:name>
+              </c:function>
+              <c:arguments xsi:type="ns0:String">
+                <c:value>Hello %d\n</c:value>
+              </c:arguments>
+              <c:arguments xsi:type="ns0:Identifier">
+                <c:name>i</c:name>
+              </c:arguments>
+            </c:stmt>
+          </c:body>
+        </c:function>
+      </c:node>
+    </c:nodes>
 
 
 TODO
@@ -73,3 +73,5 @@ TODO
 * Test/fix the parser by testing lots of C code
 * Error conditions
 * Consume parse tree and translate to another form (e.g. assembly)
+
+# vim: ts=4 sts=4 sw=4 expandtab:
