@@ -73,5 +73,3 @@ TODO
 * Test/fix the parser by testing lots of C code
 * Error conditions
 * Consume parse tree and translate to another form (e.g. assembly)
-
-vim: ts=4 sts=4 sw=4 expandtab:
