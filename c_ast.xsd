@@ -1,0 +1,455 @@
+<xs:schema version="1.0" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	xmlns="urn:c-ast" targetNamespace="urn:c-ast">
+
+<xs:complexType name="ASTBase">
+    <xs:sequence/>
+    <xs:attribute name="file" type="xs:string" use="optional"/>
+    <xs:attribute name="line" type="xs:int" use="optional"/>
+    <xs:attribute name="pos" type="xs:int" use="optional"/>
+</xs:complexType>
+
+
+<xs:complexType name="Expression">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="ExpressionList">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Constant">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+            </xs:sequence>
+        </xs:extension>
+        <xs:attribute name="modifiers" type="xs:string"/>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Integer">
+    <xs:complexContent>
+        <xs:extension base="Constant">
+            <xs:sequence>
+                <xs:element name="value" type="xs:int"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Double">
+    <xs:complexContent>
+        <xs:extension base="Constant">
+            <xs:sequence>
+                <xs:element name="value" type="xs:double"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Char">
+    <xs:complexContent>
+        <xs:extension base="Constant">
+            <xs:sequence>
+                <xs:element name="value" type="xs:string"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="String">
+    <xs:complexContent>
+        <xs:extension base="Constant">
+            <xs:sequence>
+                <xs:element name="value" type="xs:string"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Identifier">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="name" type="xs:string"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:simpleType name="UnaryOperations">
+    <xs:restriction base="xs:string">
+        <xs:enumeration value="negate"/>
+        <xs:enumeration value="invert"/>
+        <xs:enumeration value="lognot"/>
+        <xs:enumeration value="addressof"/>
+        <xs:enumeration value="dereference"/>
+        <xs:enumeration value="preinc"/>
+        <xs:enumeration value="postinc"/>
+        <xs:enumeration value="predec"/>
+        <xs:enumeration value="postdec"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="UnaryOp">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+            </xs:sequence>
+            <xs:attribute name="op" type="UnaryOperations"/>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:simpleType name="BinaryOperations">
+    <xs:restriction base="xs:string">
+        <xs:enumeration value="mul"/>
+        <xs:enumeration value="div"/>
+        <xs:enumeration value="mod"/>
+        <xs:enumeration value="add"/>
+        <xs:enumeration value="sub"/>
+        <xs:enumeration value="shl"/>
+        <xs:enumeration value="shr"/>
+        <xs:enumeration value="and"/>
+        <xs:enumeration value="or"/>
+        <xs:enumeration value="xor"/>
+        <xs:enumeration value="logand"/>
+        <xs:enumeration value="logor"/>
+        <xs:enumeration value="eq"/>
+        <xs:enumeration value="ne"/>
+        <xs:enumeration value="lt"/>
+        <xs:enumeration value="le"/>
+        <xs:enumeration value="gt"/>
+        <xs:enumeration value="ge"/>
+        <xs:enumeration value="assign"/>
+        <xs:enumeration value="index"/>
+        <xs:enumeration value="field"/>
+        <xs:enumeration value="ptrfield"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="BinaryOp">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="lhs" type="Expression"/>
+                <xs:element name="rhs" type="Expression"/>
+            </xs:sequence>
+            <xs:attribute name="op" type="BinaryOperations"/>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Cast">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="type" type="Expression"/>
+                <xs:element name="expr" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Call">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="function" type="Expression"/>
+                <xs:element name="arguments" type="Expression" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="ConditionalOp">
+    <xs:complexContent>
+        <xs:extension base="Expression">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="condtrue" type="Expression"/>
+                <xs:element name="condfalse" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Statement">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="StatementList">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="stmt" type="Statement" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="If">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="condtrue" type="Statement"/>
+                <xs:element name="condfalse" type="Statement" minOccurs="0"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Switch">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="body" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="While">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="stmt" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="DoWhile">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="body" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="DoWhile">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="stmt" type="Statement"/>
+                <xs:element name="body" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="For">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="init" type="Expression"/>
+                <xs:element name="condition" type="Expression"/>
+                <xs:element name="control" type="Expression"/>
+                <xs:element name="body" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Label">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+            </xs:sequence>
+            <xs:attribute name="label" type="xs:string"/>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Case">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression"/>
+                <xs:element name="stmt" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Default">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="stmt" type="Statement"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Goto">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="target" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Break">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Continue">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Return">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="expr" type="Expression" minOccurs="0"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Declarator">
+    <xs:complexContent>
+        <xs:extension base="Statement">
+            <xs:sequence>
+                <xs:element name="name" type="xs:string" minOccurs="0"/>
+                <xs:element name="type" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="asize" type="Expression" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="signature" type="FuncSig" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="bitfield" type="xs:int" minOccurs="0"/>
+                <xs:element name="initializer" type="Expression" minOccurs="0"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Array">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="size" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="FuncSig">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="sig" type="Declarator" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Enumerator">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="name" type="xs:string"/>
+                <xs:element name="value" type="Expression"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Enumeration">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="name" type="xs:string"/>
+                <xs:element name="value" type="Enumerator" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="CompositeType">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="name" type="xs:string"/>
+                <xs:element name="body" type="Declarator" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="type" type="xs:string"/>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="Function">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="signature" type="Declarator"/>
+                <xs:element name="rtype" type="Declarator"/>
+                <xs:element name="body" type="StatementList"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="ExternalDeclaration">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:choice>
+                <xs:element name="function" type="Function"/>
+                <xs:element name="declaration" type="Declarator"/>
+                <xs:element name="composite" type="CompositeType"/>
+            </xs:choice>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="TranslationUnit">
+    <xs:complexContent>
+        <xs:extension base="ASTBase">
+            <xs:sequence>
+                <xs:element name="node" type="ExternalDeclaration" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:element name="nodes" type="TranslationUnit"/>
+
+
+<!--
+vim: ts=4 sts=4 sw=4 expandtab:
+ -->
+</xs:schema>	
