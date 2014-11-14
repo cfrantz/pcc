@@ -25,8 +25,6 @@ class AST(object):
     _fields = []
     def __init__(self, **kwargs):
         operators = getattr(self, 'operators', None)
-#        if isinstance(self, Expr):
-#            self.precedence = 0
         for k, defval in zip(self._fields, self._defval):
             v = kwargs.pop(k, None)
             if v is None:
@@ -324,8 +322,8 @@ class Arguments(AST):
     _defval = [None]
 
 class Declarator(Statement):
-    _fields = ['name', 'type', 'array', 'args', 'bitfield', 'initializer']
-    _defval = [None, [], [], [], None, None]
+    _fields = ['name', 'type', 'array', 'args', 'returns', 'bitfield', 'initializer']
+    _defval = [None, [], [], [], None, None, None]
 
     def set_initializer(self, i):
         self.initializer = i or None
@@ -336,37 +334,40 @@ class Declarator(Statement):
         return self
 
     @staticmethod
-    def decl(decls, spec):
-        if not decls:
-            decls = Declarator()
+    def decl(decl, spec):
+        if isinstance(decl, list):
+            for d in decl:
+                Declarator.decl(d, spec)
+            return decl
+        if not decl:
+            decl = Declarator()
 
-        if not isinstance(decls, list):
-            decls = [decls]
-
-        print "declspec:", decls, spec
-        for d in decls:
-            d.type.extend(spec)
-        return decls
+        if decl.returns:
+            Declarator.decl(decl.returns, spec)
+        else:
+            decl.type.extend(spec)
+        return [decl]
 
     @staticmethod
     def mods(decl, modifiers):
         if isinstance(decl, list):
-            print 'declmods list:', len(list)
             for d in decl:
                 Declarator.mods(d, modifiers)
             return decl
-        
         if not decl:
             decl = Declarator()
+
         modifiers = list(modifiers)
-        print "declmod:", decl, modifiers
         for m in modifiers:
-            if isinstance(m, Array):
+            if decl.returns:
+                Declarator.mods(decl.returns, [m])
+            elif isinstance(m, Array):
                 decl.type.append('array')
                 decl.array.append(m)
             elif isinstance(m, Arguments):
                 decl.type.append('function')
                 decl.args.extend(m.args)
+                decl.returns = Declarator()
             elif isinstance(m, basestring):
                 decl.type.append(m)
         return decl

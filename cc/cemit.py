@@ -204,43 +204,49 @@ def emit_Default(node):
 def emit_Return(node):
     return 'return %s;' % emit(node.expr)
 
-@emitter
-def emit_Declarator(node):
+def emit_declarator(node):
     func = False
     pointer = False
     arr = 0
     name = node.name or ''
-    decl = [name]
+    left = [name]
+    right = []
     for t in node.type:
         if t == 'pointer':
-            decl.insert(0, '*')
+            left.insert(0, '*')
             pointer = True
         elif t == 'function':
             func = True
             if pointer:
-                decl.insert(0, '(')
-                decl.append(')')
+                left.insert(0, '(')
+                right.append(')')
         elif t == 'array':
-            decl.append('[%s]' % emit(node.array[arr]))
+            left.append('[%s]' % emit(node.array[arr]))
             arr += 1
         else:
             if isinstance(t, C.AST):
-                decl.insert(0, emit(t))
+                left.insert(0, emit(t))
             else:
-                decl.insert(0, t)
+                left.insert(0, ' ')
+                left.insert(0, t)
 
     if func:
-        func = [emit(x) for x in node.args]
-        decl.append('(%s)' % (', '.join(func)))
-#        name += '(%s)' % (', '.join(func))
+        rleft, rright = emit_declarator(node.returns)
+        left.insert(0, rleft)
+        args = '(' + ', '.join([emit(x) for x in node.args]) + ')'
+        right.append(args)
+        right.append(rright)
 
-#    if name:
-#        decl.append(name)
     if node.initializer:
-        decl.append('=')
-        decl.append(emit(node.initializer))
+        right.append(' = ')
+        right.append(emit(node.initializer))
 
-    return ' '.join(decl)
+    return ''.join(left), ''.join(right)
+
+@emitter
+def emit_Declarator(node):
+    left, right = emit_declarator(node)
+    return left+right
     
 @emitter
 def emit_Enumerator(node):
