@@ -23,6 +23,8 @@ def concat(*args):
 
 class AST(object):
     _fields = []
+    _defval = []
+    _extra = {}
     def __init__(self, **kwargs):
         operators = getattr(self, 'operators', None)
         for k, defval in zip(self._fields, self._defval):
@@ -34,16 +36,20 @@ class AST(object):
                 self.precedence = prec
             setattr(self, k, v)
 
+        for k,v in self._extra.items():
+            v = kwargs.pop(k, v)
+            setattr(self, k, v)
+
         if kwargs:
             raise Exception('Unknown initializers for class %s: %r' % (
                 self.__class__.__name__, kwargs)) 
 
     def _print(self, indent, sio):
         name = self.__class__.__name__
-        sio.write(name+'('+hex(id(self)))
+        sio.write(name+'(')
         indent += len(name)+1
         for i, k in enumerate(self._fields):
-            if True:
+            if i:
                 sio.write(',\n'+' '*indent)
             v = getattr(self, k)
             sio.write(k+'=')
@@ -64,6 +70,11 @@ class AST(object):
             else:
                 sio.write(repr(v))
         sio.write(')')
+
+    def _become(self, cls):
+        kw = {k: getattr(self, k) for k in self._fields}
+        print("Become %s(%r)" % (cls, kw))
+        return cls(**kw)
 
     def __repr__(self):
         sio = StringIO()
@@ -314,16 +325,25 @@ class Default(Statement):
     _defval = [None]
 
 class Return(Statement):
-    _fields = ['value']
+    _fields = ['expr']
     _defval = [None]
 
 class Arguments(AST):
     _fields = ['args']
     _defval = [None]
 
+class Initializer(AST):
+    _fields = ['initializer', 'designator']
+    _defval = [None, []]
+
+    def set_designator(self, d):
+        self.designator = d
+        return self
+
 class Declarator(Statement):
     _fields = ['name', 'type', 'array', 'args', 'returns', 'bitfield', 'initializer']
     _defval = [None, [], [], [], None, None, None]
+    _extra = {'offset':None, 'reg':None, 'count':0, 'extra':None, 'impl':False}
 
     def set_initializer(self, i):
         self.initializer = i or None
@@ -336,14 +356,20 @@ class Declarator(Statement):
     @staticmethod
     def decl(decl, spec):
         if isinstance(decl, list):
-            for d in decl:
-                Declarator.decl(d, spec)
-            return decl
+            return [Declarator.decl(d, spec) for d in decl]
         if not decl:
             decl = Declarator()
 
+        if 'typedef' in spec:
+            spec.remove('typedef')
+            decl = decl._become(Typedef)
+
         if decl.returns:
-            Declarator.decl(decl.returns, spec)
+            for s in spec:
+                if s in ('extern', 'static'):
+                    decl.type.insert(0,s)
+                else:
+                    Declarator.decl(decl.returns, [s])
         else:
             decl.type.extend(spec)
         return [decl]
@@ -351,9 +377,7 @@ class Declarator(Statement):
     @staticmethod
     def mods(decl, modifiers):
         if isinstance(decl, list):
-            for d in decl:
-                Declarator.mods(d, modifiers)
-            return decl
+            return [Declarator.mods(d, modifiers) for d in decl]
         if not decl:
             decl = Declarator()
 
@@ -371,6 +395,9 @@ class Declarator(Statement):
             elif isinstance(m, basestring):
                 decl.type.append(m)
         return decl
+
+class Typedef(Declarator):
+    pass
 
 class Enumerator(AST):
     _fields = ['name', 'value']
@@ -392,6 +419,8 @@ class CompositeType(AST):
             cls = Union
         else:
             raise Exception('Expecting struct or union')
+        if name:
+            name = name.name
         return cls(name=name, body=body)
 
 class Struct(CompositeType):
@@ -409,8 +438,13 @@ class DeclSpec(AST):
     _defval = [None]
 
 class Function(AST):
-    _fields = ['signature', 'returns', 'body']
+    _fields = ['signature', 'body']
     _defval = [None, None, None]
+
+    @classmethod
+    def init(cls, signature, returns, body):
+        Declarator.decl(signature, returns)
+        return cls(signature=signature, body=body)
 
 class TranslationUnit(AST):
     _fields = ['body']

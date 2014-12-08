@@ -10,7 +10,7 @@ with peg:
 
     FunctionDefinition = (
         DeclarationSpecifiers is r, Declarator is sig, DeclarationList.opt, CompoundStatement is body
-    ) >> C.Function(returns=C.Declarator(type=r), signature=sig, body=body)
+    ) >> C.Function.init(sig, r, body)
 
     DeclarationList = Declaration.rep1
 
@@ -90,8 +90,8 @@ with peg:
 
     EnumSpecifier = (
         ENUM, (
-            (Identifier.opt is i, LWING, EnumeratorList is e, COMMA.opt, RWING) >> C.Enumeration(name=i, values=e)
-            | (Identifier is i) >> ('enum:%s' % i)
+            (Identifier.opt is i, LWING, EnumeratorList is e, COMMA.opt, RWING) >> C.Enumeration(name=i.name, values=e)
+            | (Identifier is i) >> C.Enumeration(name=i.name)
         ) 
     ) // (lambda x: x[1])
 
@@ -111,7 +111,7 @@ with peg:
     Declarator = (Pointer.opt is p, DirectDeclarator is d) >> C.Declarator.mods(d, p)
 
     DirectDeclarator = (
-        ( Identifier >> C.Declarator(name=Identifier)
+        ( Identifier >> C.Declarator(name=Identifier.name)
         | (LPAR, Declarator is d, RPAR) >> d
         ) is d,
         ( (LBRK, TypeQualifier.rep, AssignmentExpression.opt is sz, RBRK) >>  C.Array(expr=sz)
@@ -158,19 +158,22 @@ with peg:
     TypedefName = Identifier
 
     Initializer = (
-        AssignmentExpression
-        | (LWING, InitializerList, COMMA.opt, RWING)
+        (AssignmentExpression is a) >> C.Initializer(initializer=a)
+        | (LWING, InitializerList is i, COMMA.opt, RWING) >> i
         )
 
     InitializerList = (
-        Designation.opt, Initializer, (COMMA, Designation.opt, Initializer).rep
-        )
+        ((Designation.opt is d, Initializer is i) >>
+            i.set_designator(d)) is first,
+        ((COMMA, Designation.opt is d, Initializer is i) >>
+            i.set_designator(d)).rep is rest
+        ) >> [first]+rest
 
-    Designation = (Designator.rep1, EQU)
+    Designation = (Designator.rep1, EQU) >> Designator
 
     Designator = (
-        (LBRK, ConstantExpression, RBRK)
-        | (DOT, Identifier)
+        (LBRK, ConstantExpression is c, RBRK) >> c
+        | (DOT, Identifier is i) >> i
         )
 
     # Statements
@@ -223,7 +226,7 @@ with peg:
 
     # Expressions
     PrimaryExpression = (
-        (Identifier is i) >> C.Identifier(name=i)
+        Identifier
         | Constant 
         | StringLiteral 
         | (LPAR, Expression, RPAR) >> Expression
@@ -235,8 +238,8 @@ with peg:
           ) is lhs, (
           (LBRK, Expression, RBRK) >> C.Subscript(index=Expression)
           | (LPAR, ArgumentExpressionList.opt is args, RPAR) >> C.Call(args=args)
-          | (DOT, Identifier) >> C.Field(op=DOT, field=Identifier)
-          | (PTR, Identifier) >> C.Field(op=PTR, field=Identifier)
+          | (DOT, Identifier) >> C.Field(op=DOT, field=Identifier.name)
+          | (PTR, Identifier) >> C.Field(op=PTR, field=Identifier.name)
           | INC >> C.PostfixOp(op=INC)
           | DEC >> C.PostfixOp(op=DEC)
           ).rep is rest) >> C.PostfixOp.init(lhs, rest)
@@ -247,7 +250,7 @@ with peg:
             PostfixExpression 
             | (INC, UnaryExpression) >> C.PrefixOp(op=INC, operand=UnaryExpression)
             | (DEC, UnaryExpression) >> C.PrefixOp(op=DEC, operand=UnaryExpression)
-            | (UnaryOperator, CastExpression) >> C.UnaryOp.init(UnaryOperator, CastExpression)
+            | (UnaryOperator, CastExpression) >> C.UnaryOp.init(UnaryOperator, [CastExpression])
             | (SIZEOF, (UnaryExpression | (LPAR, TypeName, RPAR)))
         )
 
@@ -261,9 +264,9 @@ with peg:
 
     ShiftExpression = (AdditiveExpression is expr, ((LEFT | RIGHT), AdditiveExpression).rep is rest) >> C.BinOp.init(expr, rest)
 
-    RelationalExpression = (ShiftExpression is expr, ((LE | GE | LT | GT), ShiftExpression).rep is rest) >> C.BinOp.init(expr, rest)
+    RelationalExpression = (ShiftExpression is expr, ((LE | GE | LT | GT), ShiftExpression).rep is rest) >> C.Compare.init(expr, rest)
 
-    EqualityExpression = (RelationalExpression is expr, ((EQUEQU | BANGEQU), RelationalExpression).rep is rest) >> C.BinOp.init(expr, rest)
+    EqualityExpression = (RelationalExpression is expr, ((EQUEQU | BANGEQU), RelationalExpression).rep is rest) >> C.Compare.init(expr, rest)
 
     ANDExpression = (EqualityExpression is expr, (AND, EqualityExpression).rep is rest) >> C.BinOp.init(expr, rest)
 
@@ -373,7 +376,7 @@ with peg:
           | "__declspec"
           | "__attribute__"), -IdChar 
         
-    Identifier = (-Keyword, (IdNondigit, IdChar.rep.join).join is i, Spacing) >> i
+    Identifier = (-Keyword, (IdNondigit, IdChar.rep.join).join is i, Spacing) >> C.Identifier(name=i)
     IdNondigit = '[A-Za-z_]'.r | UniversalChar
     IdChar = '[0-9A-Za-z_]'.r | UniversalChar
     UniversalChar = r'\\u[0-9A-Fa-f]{4}'.r | r'\\U[0-9A-Fa-f]{8}'.r
