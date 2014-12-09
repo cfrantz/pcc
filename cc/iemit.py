@@ -225,16 +225,18 @@ def emit_Assign(node, ea):
 @emitter
 def emit_BoolOp(node, ea):
     ret = IList(result=tmpreg())
+    symtab.ident.enter(ret.result, C.Declarator(type=['int']))
     shortcir = anon('lbl')
     lhs = emit(node.left)
     ret.extend(lhs)
     ret.append(Move(target=ret.result, src0=lhs.result))
     if node.op == 'logand': 
-        ret.append(IfFalse(src0=ret.result, label=shortcir))
+        ret.append(IfFalse(src0=lhs.result, label=shortcir))
     else:
-        ret.append(IfTrue(src0=ret.result, label=shortcir))
+        ret.append(IfTrue(src0=lhs.result, label=shortcir))
 
     rhs = emit(node.right)
+    ret.extend(rhs)
     ret.append(Move(target=ret.result, src0=rhs.result))
     ret.append(Label(name=shortcir))
     return ret
@@ -493,11 +495,12 @@ def emit_Field(node, ea):
 
 @emitter
 def emit_Subscript(node, ea):
-    code = emit(C.BinOp(lhs=node.expr, op='+', rhs=node.index))
+    code = emit(C.BinOp(left=node.expr, op='+', right=node.index))
     if ea:
         return code
     else:
         result = tmpreg()
+        symtab.ident.enter(result, deref(code.result))
         code.append(Load(target=result, addr=code.result))
         code.result = result
         return code

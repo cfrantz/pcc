@@ -4,6 +4,7 @@ import symtab
 import typeinfo
 import error
 import cast as C
+import cstr
 
 def sizeptr(sz, ptr):
     if sz is None:
@@ -133,6 +134,9 @@ class Backend(object):
         'g':  'le',
         'ge': 'l',
     }
+    _registers = [
+        'eax', 'ebx', 'ecx', 'edx', 'esi', 'edi', 
+    ]
     _wordreg = {
         'eax': 'ax',
         'ebx': 'bx',
@@ -160,12 +164,8 @@ class Backend(object):
 
     def reset_regs(self):
         self.registers = OrderedDict()
-        self.registers['eax'] = None
-        self.registers['ebx'] = None
-        self.registers['ecx'] = None
-        self.registers['edx'] = None
-        self.registers['esi'] = None
-        self.registers['edi'] = None
+        for r in self._registers:
+            self.registers[r] = None
 
     def _reginfo(self):
         r = []
@@ -227,7 +227,7 @@ class Backend(object):
         if ofs <= 0:
             return ofs - 20
         else:
-            return ofs + 16
+            return ofs + 4
 
     def spill(self, value):
         # Spill value to memory
@@ -396,10 +396,14 @@ class Backend(object):
                 target = self.allocreg(inst.target)
                 self.a(MOV(dst=target, imm=inst.val))
         else:
-            target = self.allocreg(inst.target)
-            src = self.usereg(inst.src0)
-            error.info('target=%r src=%r', target.reg, src)
-            self.a(MOV(dst=target, src=src))
+            target = self.resolve(inst.target)
+            if target.reg:
+                # Copy over the top of another value
+                src = self.usereg(inst.src0)
+                self.a(MOV(dst=target.reg, src=src))
+            else:
+                self.flowreg(inst.target, inst.src0)
+
 
     def emit_Load(self, inst):
         # Load a value from memory
@@ -570,8 +574,12 @@ class Backend(object):
 
     def emit_Call(self, inst):
         # Push arguments and call
-        for a in reversed(inst.args):
-            self.a(PUSH(dst=self.usereg(a)))
+        sz = 0
+        for a in inst.args:
+            # FIXME: sz = (sz+sizeof(a))
+            self.a(MOV(dst='[esp+%d]'%sz, src=self.usereg(a)))
+            sz += 4
+        self.argspc = max(self.argspc, sz)
         if inst.target[0] == '%':
             self.a(CALL(dst=self.modrm(inst.target)))
         else:
@@ -599,26 +607,32 @@ class Backend(object):
         if not typeinfo.isstatic(sym):
             self.a('global %s' % inst.name)
 
+        self.argspc = 0
         self.stackpatch = SUB(dst='esp', imm=0)
         self.a(
                 LABEL(name=inst.name),
                 PUSH(dst='ebp'),
-                PUSH(dst='ebx'),
-                PUSH(dst='esi'),
-                PUSH(dst='edi'),
                 MOV(dst='ebp', src='esp'),
-                self.stackpatch)
+                AND(dst='esp', imm=-16),
+                self.stackpatch,
+                MOV(dst='[ebp-4]', src='ebx'),
+                MOV(dst='[ebp-8]', src='esi'),
+                MOV(dst='[ebp-12]', src='edi'))
 
     def emit_Leave(self, inst):
         # Emit a function epilogue, and patch the stack allocation in the
         # prologue.
         stacksz = symtab.ident.top().sizeof()
-        self.stackpatch.imm = stacksz
+        # FIXME: Don't save space for ebx, esi, edi if we don't use them.
+        # 16 bytes for ebp, ebx, esi, edi +
+        # stacksz bytes for locals + argspc bytes for arguments +
+        # alignment to 16 bytes for calling convention
+        self.stackpatch.imm = (16 + stacksz + self.argspc + 15) & ~15
         self.a(
+                MOV(src='[ebp-4]', dst='ebx'),
+                MOV(src='[ebp-8]', dst='esi'),
+                MOV(src='[ebp-12]', dst='edi'),
                 MOV(dst='esp', src='ebp'),
-                POP(dst='edi'),
-                POP(dst='esi'),
-                POP(dst='ebx'),
                 POP(dst='ebp'),
                 RET(),
                 '', '')
@@ -627,7 +641,8 @@ class Backend(object):
         if inst.name:
             self.data(LABEL(name=inst.name))
         if inst.type == 'str':
-            self.data(DB(val="'%s',0" % inst.data))
+            data = inst.data.decode('unicode_escape')
+            self.data(DB(val=cstr.nasm(data)))
         else:
             error.fatal("Don't know how to emit data %r", inst.type)
 
