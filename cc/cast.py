@@ -9,6 +9,8 @@ from copy import copy
 import itertools
 from cStringIO import StringIO
 
+print_extra = False
+
 def concat(*args):
     ret = []
     for a in args:
@@ -48,7 +50,10 @@ class AST(object):
         name = self.__class__.__name__
         sio.write(name+'(')
         indent += len(name)+1
-        for i, k in enumerate(self._fields):
+        fields = self._fields
+        if print_extra:
+            fields = fields[:] + self._extra.keys()
+        for i, k in enumerate(fields):
             if i:
                 sio.write(',\n'+' '*indent)
             v = getattr(self, k)

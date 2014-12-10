@@ -6,6 +6,7 @@ import error
 import cast as C
 import cstr
 
+
 def sizeptr(sz, ptr):
     if sz is None:
         return ptr
@@ -293,28 +294,38 @@ class Backend(object):
         # clear is false)
         sym = self.resolve(sym)
         if sym.reg is None:
-            reg = self.allocreg(sym.name, reg)
             if self.in_flags(sym):
-                self.a(SETcc(dst=sym.reg, cond=self.flags))
+                reg = self.getreg(self._bytereg.keys(), sym)
+                bytereg = self._bytereg[reg]
+                self.a(SETcc(dst=bytereg, cond=self.flags),
+                       MOVZX(dst=sym.reg, src=bytereg))
             else:
+                reg = self.allocreg(sym.name, reg)
                 self.a(MOV(dst=sym.reg, src=self.addr(sym)))
         if reg is None:
             reg = sym.reg
 
         if sym.reg != reg:
+            # Add one because allocreg decrements, transfer
+            # to the new register
             sym.count += 1
             symreg = sym.reg; sym.reg = None
             self.registers[symreg] = None
             reg = self.allocreg(sym.name, reg)
             self.a(MOV(dst=reg, src=symreg))
 
-        self.registers[reg].count -= 1
-        if self.registers[reg].count == 0:
-            sym = self.registers[reg]
-            if clear:
-                self.registers[reg] = None
-                sym.reg = None
+        self.decreg(sym, clear)
         return reg
+
+    def decreg(self, sym, clear=True):
+        sym = self.resolve(sym)
+        if sym.reg:
+            self.registers[sym.reg].count -= 1
+            if self.registers[sym.reg].count == 0:
+                if clear:
+                    self.registers[sym.reg] = None
+                    sym.reg = None
+        return sym.reg
 
     def modrm(self, sym):
         # return a mod r/m form for sym
@@ -555,7 +566,9 @@ class Backend(object):
 
     def emit_IfTrue(self, inst):
         # Check the flags condition and jump if true
-        if not self.in_flags(inst.src0):
+        if self.in_flags(inst.src0):
+            self.decreg(inst.src0)
+        else:
             r = self.usereg(inst.src0)
             self.a(OR(dst=r, src=r))
             self.set_flags(inst.src0, 'ne')
@@ -563,7 +576,9 @@ class Backend(object):
 
     def emit_IfFalse(self, inst):
         # Check the flags condition and jump if not true
-        if not self.in_flags(inst.src0):
+        if self.in_flags(inst.src0):
+            self.decreg(inst.src0)
+        else:
             r = self.usereg(inst.src0)
             self.a(OR(dst=r, src=r))
             self.set_flags(inst.src0, 'ne')
