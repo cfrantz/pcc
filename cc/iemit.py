@@ -180,15 +180,17 @@ def emit_Float(node, ea):
 def emit_Char(node, ea):
     ret = IList(result=tmpreg())
     tp = C.Declarator(type=['immediate', 'char'])
-    symtab.ident.enter(rslt, tp)
-    ret.append(Move(target=ret.result, val=node.value, size=sz))
+    symtab.ident.enter(ret.result, tp)
+    val = ord(node.value.decode('unicode_escape'))
+    ret.append(Move(target=ret.result, val=val, size=1))
     return ret
 
 @emitter
 def emit_String(node, ea):
     ret = IList(result=tmpreg())
     name = anon('str')
-    ret.append(Data(name=name, type='str', data=node.value))
+    val= node.value.decode('unicode_escape')
+    ret.append(Data(name=name, type='str', data=val))
     tp = C.Declarator(type=['pointer', 'const', 'char'])
     sz = typeinfo.sizeof(tp)
     globaltab.enter(name, typeinfo.copyof(tp))
@@ -634,7 +636,7 @@ def emit_If(node, ea):
     expr = emit(node.expr)
     ret.extend(expr)
     ret.append(IfFalse(src0=expr.result, label=orelse))
-    ret.extend(emit(node.body))
+    ret.extend(emit(node.stmt))
     if node.orelse:
         endif = anon('lbl')
         ret.append(

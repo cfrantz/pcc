@@ -292,7 +292,7 @@ with peg:
     Spacing = (WhiteSpace | LongComment | LineComment).rep
     WhiteSpace = u'[ \n\r\t\u000b\u000c]'.r
     LongComment = '/*', (r'[^*]|\*[^/]'.r ).rep , '*/'
-    LineComment = '//', '[^\n]'.r
+    LineComment = '//', '[^\n]*'.r
 
     # Keywords
     AUTO      = ("auto",       -IdChar, Spacing) // (lambda x: x[0])
@@ -398,11 +398,11 @@ with peg:
     FloatSuffix = '[flFL]'.r // str.upper
 
     EnumerationConstant = Identifier
-    CharacterConstant = ('L'.opt, "'", Char.rep.join is val, "'") >> C.Char(value=val)
+    CharacterConstant = ('L'.opt, "'", Char.rep1.join is val, "'", Spacing) >> C.Char(value=val)
     Char = Escape | "[^'\n\\\\]".r
     Escape  = "\\\\['\"?\\abfnrtv]".r
     OctalEscape = r'\[0-7][0-7]?[0-7]?'.r
-    HexEscape = r'\x[0-9A-Fa-f]+'
+    HexEscape = r'\x[0-9A-Fa-f]+'.r
 
     StringLiteral = ('L'.opt is mod, (('"', StringChar.rep.join is val, '"', Spacing) >> val).rep1.join is val) >> C.String(value=val, mod=mod)
     StringChar = Escape | '[^"\n\\\\]'.r
