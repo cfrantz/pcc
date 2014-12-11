@@ -190,7 +190,7 @@ class Backend(object):
             emit(inst)
             b = len(self.alist)
             for i in range(a-b, 0):
-                error.info("%s", self.alist[i])
+                error.info("          %r", self.alist[i])
             error.info('### REGINFO %s', self._reginfo())
         return self.dlist + self.alist
 
@@ -232,10 +232,13 @@ class Backend(object):
 
     def spill(self, value):
         # Spill value to memory
+        error.info("spilling %s(%s) to memory", value.name, value.reg)
         if value.offset is None:
             symtab.ident.top().alloc(value.name, value)
         reg = value.reg
         value.reg = None
+        # Increase the count, since we will reload this later
+        value.count += 1
         self.a(MOV(dst=self.addr(value), src=reg))
 
     def getreg(self, reg=None, sym=None):
@@ -266,7 +269,7 @@ class Backend(object):
                     if val is None:
                         reg = r
                         break
-            if reg is None:
+            if isinstance(reg, list):
                 reg = r0
 
         value = self.registers.pop(reg)
@@ -280,8 +283,9 @@ class Backend(object):
         # Allocate a register for sym (possibly a specific register)
         sym = self.resolve(sym)
         if sym.reg is None:
-            #error.info("%40s Allocating reg for %s (count=%d)", "", sym.name, sym.count)
+            error.info("%40s Allocating reg for %s (count=%d)", "", sym.name, sym.count)
             self.getreg(reg, sym)
+            error.info("%40s reg=%s (count=%d)", "", sym.reg, sym.count)
         else:
             error.fatal('Symbol %r already using register %r', sym.name, sym.reg)
         return sym.reg
@@ -300,18 +304,22 @@ class Backend(object):
                 self.a(SETcc(dst=bytereg, cond=self.flags),
                        MOVZX(dst=sym.reg, src=bytereg))
             else:
+                src = self.addr(sym)
+                error.info('Loading %s from memory (offset=%d)->%s', sym.name, sym.offset, src)
                 reg = self.allocreg(sym.name, reg)
-                self.a(MOV(dst=sym.reg, src=self.addr(sym)))
+                self.a(MOV(dst=sym.reg, src=src))
         if reg is None:
             reg = sym.reg
 
         if sym.reg != reg:
             # Add one because allocreg decrements, transfer
             # to the new register
+            error.info("register copy for %s in %s", sym.name, sym.reg)
             sym.count += 1
             symreg = sym.reg; sym.reg = None
             self.registers[symreg] = None
             reg = self.allocreg(sym.name, reg)
+            error.info("                        %s", reg)
             self.a(MOV(dst=reg, src=symreg))
 
         self.decreg(sym, clear)
@@ -337,13 +345,13 @@ class Backend(object):
         error.fatal('Symbol %r not in register and has no offset', sym.name)
         return self.usereg(sym)
 
-    def flowreg(self, target, src0):
+    def flowdst(self, target, src0):
         # Determine if this is src0's last use and if we can immediately
-        # claim src0's register for target.  If not, allocate anotehr register
-        # and make a copy of src0.
+        # claim src0's register for target.
         target = self.resolve(target)
         src0 = self.resolve(src0)
         self.usereg(src0, clear=False)
+        error.info("flowreg: checking %s -> %s", src0.name, src0.reg)
 
         if self.registers[src0.reg].count == 0:
             target.reg = src0.reg
@@ -352,7 +360,12 @@ class Backend(object):
             src0.reg = None
             return target.reg
 
-        self.allocreg(target)
+        # If we can't immediately reuse target, allocate a new register
+        # and copy the value from src0.
+        src0 = self.resolve(src0)
+        targetregs = [r for r in self._registers if r != src0.reg]
+        self.allocreg(target, targetregs)
+        error.info('allocating register for target: %s -> %s', target.name, target.reg)
         self.a(MOV(dst=target.reg, src=src0.reg))
         return target.reg
 
@@ -413,7 +426,7 @@ class Backend(object):
                 src = self.usereg(inst.src0)
                 self.a(MOV(dst=target.reg, src=src))
             else:
-                self.flowreg(inst.target, inst.src0)
+                self.flowdst(inst.target, inst.src0)
 
 
     def emit_Load(self, inst):
@@ -449,12 +462,12 @@ class Backend(object):
 
     def emit_Negate(self, inst):
         # Negate (2's complement) a value
-        self.a(NEG(dst=self.flowreg(inst.target, inst.src0)))
+        self.a(NEG(dst=self.flowdst(inst.target, inst.src0)))
         self.set_flags(inst.target, 'e')
 
     def emit_Complement(self, inst):
         # Complement (1's complement) a value
-        self.a(NOT(dst=self.flowreg(inst.target, inst.src0)))
+        self.a(NOT(dst=self.flowdst(inst.target, inst.src0)))
 
     def emit_Not(self, inst):
         # Logical not of a value
@@ -463,17 +476,17 @@ class Backend(object):
         self.set_flags(inst.target, 'e')
 
     def emit_Add(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(ADD(dst=target, src=self.modrm(inst.src1)))
 
     def emit_Sub(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(SUB(dst=target, src=self.modrm(inst.src1)))
 
     def emit_Mul(self, inst):
         if self.issigned(inst):
             # signed multiply is the only version of mul that is nice
-            target = self.flowreg(inst.target, inst.src0)
+            target = self.flowdst(inst.target, inst.src0)
             self.a(IMUL(dst=target, src=self.modrm(inst.src1)))
         else:
             # Get src0 into eax, and clobber edx since the instruction
@@ -516,31 +529,31 @@ class Backend(object):
         self.allocreg(inst.target, 'edx')
 
     def emit_Sub(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(SUB(dst=target, src=self.modrm(inst.src1)))
 
     def emit_And(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(AND(dst=target, src=self.modrm(inst.src1)))
 
     def emit_Or(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(OR(dst=target, src=self.modrm(inst.src1)))
 
     def emit_Xor(self, inst):
-        target = self.flowreg(inst.target, inst.src0)
+        target = self.flowdst(inst.target, inst.src0)
         self.a(XOR(dst=target, src=self.modrm(inst.src1)))
 
     def emit_Shl(self, inst):
         # shift amount goes into cl (e.g. ecx)
         cl = self.usereg(inst.src1, 'ecx')
-        r = self.flowreg(inst.target, inst.src0)
+        r = self.flowdst(inst.target, inst.src0)
         self.a(SHL(dst=r, cl=cl))
 
     def emit_Shr(self, inst):
         # shift amount goes into cl (e.g. ecx)
         cl = self.usereg(inst.src1, 'ecx')
-        r = self.flowreg(inst.target, inst.src0)
+        r = self.flowdst(inst.target, inst.src0)
         self.a(SHR(dst=r, cl=cl))
 
     def emit_Eq(self, inst):
@@ -656,8 +669,7 @@ class Backend(object):
         if inst.name:
             self.data(LABEL(name=inst.name))
         if inst.type == 'str':
-            data = inst.data.decode('unicode_escape')
-            self.data(DB(val=cstr.nasm(data)))
+            self.data(DB(val=cstr.nasm(inst.data)))
         else:
             error.fatal("Don't know how to emit data %r", inst.type)
 
