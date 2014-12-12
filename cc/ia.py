@@ -33,6 +33,10 @@ class Instruction(object):
                 args.append('%s=%r' % (k, v))
         return '%s(%s)' % (self.__class__.__name__, ', '.join(args))
         
+class EffectiveAddr(Instruction):
+    _fields = ['target', 'symbol']
+    _defval = [None, None]
+
 class Load(Instruction):
     _fields = ['target', 'addr', 'size', 'signed']
     _defval = [None, None, defsz, True]
@@ -41,8 +45,12 @@ class Store(Instruction):
     _fields = ['src0', 'addr', 'size']
     _defval = [None, None, defsz]
 
+class Constant(Instruction):
+    _fields = ['target', 'val', 'size', 'signed']
+    _defval = [None, None, defsz, True]
+
 class Move(Instruction):
-    _fields = ['target', 'src0', 'val', 'size', 'signed']
+    _fields = ['target', 'src0', 'size', 'signed']
     _defval = [None, None, None, None, None]
 
 class TwoOp(Instruction):

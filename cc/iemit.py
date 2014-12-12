@@ -159,7 +159,7 @@ def emit_Integer(node, ea):
     tp = C.Declarator(type=tp)
     sz = typeinfo.sizeof(tp)
     symtab.ident.enter(ret.result, tp)
-    ret.append(Move(target=ret.result, val=node.value, signed=signed, size=sz))
+    ret.append(Constant(target=ret.result, val=node.value, signed=signed, size=sz))
     return ret
 
 @emitter
@@ -173,7 +173,7 @@ def emit_Float(node, ea):
     tp = C.Declarator(type=tp)
     sz = typeinfo.sizeof(tp)
     symtab.ident.enter(ret.result, tp)
-    ret.append(Move(target=ret.result, val=node.value, size=sz))
+    ret.append(Constant(target=ret.result, val=node.value, size=sz))
     return ret
 
 @emitter
@@ -182,7 +182,7 @@ def emit_Char(node, ea):
     tp = C.Declarator(type=['immediate', 'char'])
     symtab.ident.enter(ret.result, tp)
     val = ord(node.value.decode('unicode_escape'))
-    ret.append(Move(target=ret.result, val=val, size=1))
+    ret.append(Constant(target=ret.result, val=val, size=1))
     return ret
 
 @emitter
@@ -195,19 +195,22 @@ def emit_String(node, ea):
     sz = typeinfo.sizeof(tp)
     globaltab.enter(name, typeinfo.copyof(tp))
     symtab.ident.enter(ret.result, tp)
-    ret.append(Move(target=ret.result, val=name, size=sz))
+    ret.append(EffectiveAddr(target=ret.result, symbol=name))
     return ret
 
 @emitter
 def emit_Identifier(node, ea):
-    ret = IList(result=tmpreg())
-    rtype = copyof(node.name)
-    symtab.ident.enter(ret.result, rtype)
+    ret = IList()
+    addr = tmpreg()
+    symtab.ident.enter(addr, addrof(node.name))
+    ret.append(EffectiveAddr(target=addr, symbol=node.name))
     if ea:
-        rtype.type.insert(0, 'pointer')
-        ret.append(Move(target=ret.result, val=node.name))
+        ret.result = addr
     else:
-        ret.append(Load(target=ret.result, addr=node.name))
+        value = tmpreg()
+        symtab.ident.enter(value, copyof(node.name))
+        ret.append(Load(target=value, addr=addr))
+        ret.result = value
     return ret
 
 @emitter
@@ -260,7 +263,7 @@ def emit_binop(node, ea):
         sztmp = tmpreg()
         ret.append(
             Sub(target=tmp, src0=lhs.result, src1=rhs.result),
-            Move(target=sztmp, val=sz),
+            Constant(target=sztmp, val=sz),
             Div(target=ret.result, src0=tmp, src1=sztmp))
         return ret
     elif node.op in ('add', 'sub') and isptr(lhs.result):
@@ -298,82 +301,82 @@ def emit_binop(node, ea):
 
     if node.op == 'add':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val + rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val + rhs[0].val)))
         else:
             ret.append(Add(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'sub':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val - rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val - rhs[0].val)))
         else:
             ret.append(Sub(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'mul':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val * rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val * rhs[0].val)))
         else:
             ret.append(Mul(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'div':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val / rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val / rhs[0].val)))
         else:
             ret.append(Div(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'mod':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val % rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val % rhs[0].val)))
         else:
             ret.append(Mod(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'and':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val & rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val & rhs[0].val)))
         else:
             ret.append(And(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'or':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val | rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val | rhs[0].val)))
         else:
             ret.append(Or(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'xor':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val ^ rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val ^ rhs[0].val)))
         else:
             ret.append(Xor(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'shl':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val << rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val << rhs[0].val)))
         else:
             ret.append(Shl(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'shr':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val >> rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val >> rhs[0].val)))
         else:
             ret.append(Shr(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'eq':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val == rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val == rhs[0].val)))
         else:
             ret.append(Eq(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'ne':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val != rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val != rhs[0].val)))
         else:
             ret.append(Ne(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'gt':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val > rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val > rhs[0].val)))
         else:
             ret.append(Gt(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'ge':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val >= rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val >= rhs[0].val)))
         else:
             ret.append(Ge(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'lt':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val < rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val < rhs[0].val)))
         else:
             ret.append(Lt(target=ret.result, src0=lhs.result, src1=rhs.result))
     elif node.op == 'le':
         if const:
-            ret.append(Move(target=ret.result, val=(lhs[0].val <= rhs[0].val)))
+            ret.append(Constant(target=ret.result, val=(lhs[0].val <= rhs[0].val)))
         else:
             ret.append(Le(target=ret.result, src0=lhs.result, src1=rhs.result))
 
@@ -417,19 +420,19 @@ def emit_UnaryOp(node, ea):
     if node.op == 'neg':
         symtab.ident.enter(ret.result, copyof(code.result))
         if const:
-            ret.append(Move(target=ret.result, val=-code[0].val))
+            ret.append(Constant(target=ret.result, val=-code[0].val))
         else:
             ret.append(Negate(target=ret.result, src0=code.result))
     elif node.op == 'inv':
         symtab.ident.enter(ret.result, copyof(code.result))
         if const:
-            ret.append(Move(target=ret.result, val=~code[0].val))
+            ret.append(Constant(target=ret.result, val=~code[0].val))
         else:
             ret.append(Complement(target=ret.result, src0=code.result))
     elif node.op == 'not':
         symtab.ident.enter(ret.result, C.Declarator(type=['int']))
         if const:
-            ret.append(Move(target=ret.result, val=not code[0].val))
+            ret.append(Constant(target=ret.result, val=not code[0].val))
         else:
             ret.append(Not(target=ret.result, src0=code.result))
     elif node.op == 'addrof':
@@ -481,18 +484,15 @@ def emit_Field(node, ea):
         error.fatal('Cannot find field %r in %r', node.field, tp.name)
 
     tmp = tmpreg()
-    tmpofs = tmpreg()
     symtab.ident.enter(tmp, typeinfo.addrof(field))
     ret.append(
-        Move(target=tmpofs, val=field.offset),
-        Add(target=tmp, src0=rr, src1=tmpofs))
+        Add(target=tmp, src0=rr, src1=emit(C.Integer(value=field.offset))))
 
-    if not ea:
-        symtab.ident.enter(ret.result, typeinfo.addrof(field))
-        ret.append(Load(target=ret.result, addr=tmp))
+    if ea:
+        ret.result = tmp
     else:
-        symtab.ident.enter(ret.result, typeinfo.copyof(field))
-        ret.append(Move(target=ret.result, src0=tmp))
+        symtab.ident.enter(ret.result, copyof(field))
+        ret.append(Load(target=ret.result, addr=tmp))
     return ret
 
 @emitter

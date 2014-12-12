@@ -25,6 +25,7 @@ class x86inst(object):
     _fields = []
     _defval = []
     def __init__(self, **kwargs):
+        C.print_extra = True
         for k in self._fields:
             v = kwargs.pop(k, None)
             setattr(self, k, v)
@@ -345,6 +346,12 @@ class Backend(object):
         error.fatal('Symbol %r not in register and has no offset', sym.name)
         return self.usereg(sym)
 
+    def lastuse(self, sym):
+        sym = self.resolve(sym)
+        if sym.reg and sym.count == 1:
+            return True
+        return False
+
     def flowdst(self, target, src0):
         # Determine if this is src0's last use and if we can immediately
         # claim src0's register for target.
@@ -402,45 +409,48 @@ class Backend(object):
         # A pseudo-instruction for managing symbol tables
         symtab.ident.pop()
 
+    def emit_Constant(self, inst):
+        # Load a constaint value into a register
+        target = self.allocreg(inst.target)
+        self.a(MOV(dst=target, imm=inst.val))
+
+    def emit_EffectiveAddr(self, inst):
+        tab, sym = symtab.ident.find(inst.symbol)
+        target = self.allocreg(inst. target)
+        if tab.type == 'global':
+            self.a(MOV(dst=target, imm=inst.symbol))
+        else:
+            self.a(LEA(dst=target, addr=self.addr(inst.symbol)))
+
     def emit_Move(self, inst):
         # Move a value into a register (const, effective addr or reg-to-reg)
-        if inst.val is not None:
-            if isinstance(inst.val, str):
-                target = self.allocreg(inst.target)
-                tab, sym = symtab.ident.find(inst.val)
-                if tab.type == 'global':
-                    self.a(MOV(dst=target, imm=inst.val))
-                else:
-                    self.a(LEA(dst=target, addr=self.addr(inst.val)))
-            else:
-                # FIXME(cfrantz)
-                # should look forward and see if the immediate value is used
-                # in an instruction that accepts an immediate.  If it is, then
-                # we don't have to do this load.
-                target = self.allocreg(inst.target)
-                self.a(MOV(dst=target, imm=inst.val))
+        target = self.resolve(inst.target)
+        if target.reg:
+            # Copy over the top of another value
+            src = self.usereg(inst.src0)
+            self.a(MOV(dst=target.reg, src=src))
         else:
-            target = self.resolve(inst.target)
-            if target.reg:
-                # Copy over the top of another value
-                src = self.usereg(inst.src0)
-                self.a(MOV(dst=target.reg, src=src))
-            else:
-                self.flowdst(inst.target, inst.src0)
-
+            self.flowdst(inst.target, inst.src0)
 
     def emit_Load(self, inst):
         # Load a value from memory
-        target = self.allocreg(inst.target)
+        src = self.resolve(inst.addr)
+        error.info('Load: checking %s', src)
+        if src.reg and src.count == 1:
+            reg = src.reg
+            addr = self.addr(inst.addr)
+            target = self.getreg(reg, inst.target)
+        else:
+            addr = self.addr(inst.addr)
+            target = self.allocreg(inst.target)
+
         if inst.size < self.wordsz:
             if inst.signed:
-                self.a(MOVSX(dst=target, src=self.addr(inst.addr),
-                    size=inst.size))
+                self.a(MOVSX(dst=target, src=addr, size=inst.size))
             else:
-                self.a(MOVZX(dst=target, src=self.addr(inst.addr),
-                    size=inst.size))
+                self.a(MOVZX(dst=target, src=addr, size=inst.size))
         else:
-            self.a(MOV(dst=target, src=self.addr(inst.addr)))
+            self.a(MOV(dst=target, src=addr))
 
     def emit_Store(self, inst):
         # Store a value to memory
