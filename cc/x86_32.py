@@ -50,7 +50,7 @@ class x86inst(object):
                 if v is None:
                     continue
                 if k == 'cl':
-                    v = cl
+                    v = k
                 if k == 'src':
                     v = sizeptr(size, v)
             args.append(str(v))
@@ -390,13 +390,13 @@ class Backend(object):
         if sym.name[0] == '%':
             return '[%s]' % self.usereg(sym)
 
-    def issigned(self, inst):
+    def issigned(self, inst, checkboth=True):
         # return whether or not this instruction operates on signed or unsigned
         # values
         sym = self.resolve(inst.src0)
         signed = typeinfo.issigned(sym)
         src1 = getattr(inst, 'src1', None)
-        if src1:
+        if checkboth and src1:
             sym = self.resolve(inst.src1)
             signed |= typeinfo.issigned(sym)
         return signed
@@ -564,7 +564,10 @@ class Backend(object):
         # shift amount goes into cl (e.g. ecx)
         cl = self.usereg(inst.src1, 'ecx')
         r = self.flowdst(inst.target, inst.src0)
-        self.a(SHR(dst=r, cl=cl))
+        if self.issigned(inst, checkboth=False):
+            self.a(SAR(dst=r, cl=cl))
+        else:
+            self.a(SHR(dst=r, cl=cl))
 
     def emit_Eq(self, inst):
         # Logical operations don't allocate a result register, they put
@@ -618,6 +621,10 @@ class Backend(object):
             self.a(MOV(dst='[esp+%d]'%sz, src=self.usereg(a)))
             sz += 4
         self.argspc = max(self.argspc, sz)
+        # eax, edx and ecx are call clobbered
+        self.getreg('eax', fakesym())
+        self.getreg('edx', fakesym())
+        self.getreg('ecx', fakesym())
         if inst.target[0] == '%':
             self.a(CALL(dst=self.modrm(inst.target)))
         else:
