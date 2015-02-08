@@ -81,9 +81,6 @@ def isarray(decl):
         return True
     return False
 
-def isimm(decl):
-    return 'immediate' in decl.type
-
 def issigned(decl):
     return 'unsigned' not in decl.type
 

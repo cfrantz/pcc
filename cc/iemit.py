@@ -71,9 +71,6 @@ def isptr(sym):
 def isarray(sym):
     return _typehelper(sym, typeinfo.isarray)
 
-def isimm(sym):
-    return _typehelper(sym, typeinfo.isimm)
-
 def deref(sym):
     return _typehelper(sym, typeinfo.deref)
 
@@ -161,7 +158,7 @@ def emit_PassThrough(node, ea):
 @emitter
 def emit_Integer(node, ea):
     ret = IList(result=tmpreg())
-    tp = ['immediate']
+    tp = []
     signed = True
     if 'U' in node.mod:
         tp.append('unsigned')
@@ -179,7 +176,7 @@ def emit_Integer(node, ea):
 @emitter
 def emit_Float(node, ea):
     ret = IList(result=tmpreg())
-    tp = ['immediate']
+    tp = []
     if 'F' in node.mod:
         tp.append('float')
     else:
@@ -193,7 +190,7 @@ def emit_Float(node, ea):
 @emitter
 def emit_Char(node, ea):
     ret = IList(result=tmpreg())
-    tp = C.Declarator(type=['immediate', 'char'])
+    tp = C.Declarator(type=['char'])
     symtab.ident.enter(ret.result, tp)
     val = ord(node.value.decode('unicode_escape'))
     ret.append(Constant(target=ret.result, val=val, size=1))
@@ -215,7 +212,7 @@ def emit_String(node, ea):
 @emitter
 def emit_SizeOf(node, ea):
     ret = IList(result=tmpreg())
-    tp = C.Declarator(type=['immediate', 'int'])
+    tp = C.Declarator(type=['int'])
     symtab.ident.enter(ret.result, tp)
     val = emit(node.expr, True)
     #print "SizeOf", node.expr, val, val.result
