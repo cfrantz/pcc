@@ -1,6 +1,6 @@
 from StringIO import StringIO
 
-def nasm(s):
+def cstr(s):
     ret = StringIO()
     state = 0
     i = 0
@@ -30,3 +30,10 @@ def nasm(s):
     ret.write("%d" % 0)
     
     return ret.getvalue()
+
+
+def rename(filename, ext):
+    fn, _ = filename.rsplit('.', 1)
+    if ext is None:
+        return fn
+    return '.'.join((fn, ext))

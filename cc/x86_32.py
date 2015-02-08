@@ -1,10 +1,11 @@
 from collections import OrderedDict
+import subprocess
 import ia
 import symtab
 import typeinfo
 import error
 import cast as C
-import cstr
+import util
 
 
 def sizeptr(sz, ptr):
@@ -701,7 +702,7 @@ class Backend(object):
         if inst.name:
             self.data(LABEL(name=inst.name))
         if inst.type == 'str':
-            self.data(DB(val=cstr.nasm(inst.data)))
+            self.data(DB(val=util.cstr(inst.data)))
         else:
             error.fatal("Don't know how to emit data %r", inst.type)
 
@@ -709,3 +710,14 @@ class Backend(object):
         sym = self.resolve(inst.name)
         if not sym.impl:
             self.a('extern %s' % inst.name)
+
+
+    @staticmethod
+    def assembler(filename):
+        return subprocess.call(['nasm', '-felf', '-g', filename])
+
+    @staticmethod
+    def linker(filenames):
+        outfile = util.rename(filenames[0], None)
+        filenames = [util.rename(f, 'o') for f in filenames]
+        return subprocess.call(['gcc', '-m32', '-o', outfile] + filenames)
