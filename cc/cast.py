@@ -392,6 +392,7 @@ class Declarator(Statement):
             decl = Declarator()
 
         modifiers = list(modifiers)
+        function = False
         for m in modifiers:
             if decl.returns:
                 Declarator.mods(decl.returns, [m])
@@ -401,13 +402,17 @@ class Declarator(Statement):
             elif isinstance(m, Arguments):
                 decl.type.append('function')
                 decl.args.extend(m.args)
-                decl.returns = Declarator()
+                function = True
             elif isinstance(m, basestring):
                 decl.type.append(m)
             elif isinstance(m, CompositeType):
                 decl.type.append(m)
+            elif isinstance(m, AttributeList):
+                decl.type.extend(m.attr)
             else:
                 error.fatal("Don't know how to handle declmods %r", m)
+        if function:
+                decl.returns = Declarator()
         return decl
 
 class Typedef(Declarator):
@@ -444,8 +449,12 @@ class Union(CompositeType):
     pass
 
 class Attribute(AST):
+    _fields = ['name', 'args']
+    _defval = [None, []]
+
+class AttributeList(AST):
     _fields = ['attr']
-    _defval = [None]
+    _defval = [ [] ]
 
 class DeclSpec(AST):
     _fields = ['spec']

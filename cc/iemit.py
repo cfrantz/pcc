@@ -817,6 +817,10 @@ def emit_Declarator(node, ea):
     return ret
 
 @emitter
+def emit_Attribute(node, ea):
+    return IList()
+
+@emitter
 def emit_Typedef(node, ea):
     symtab.typedef.enter(node.name, node)
     return IList()

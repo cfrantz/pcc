@@ -48,7 +48,18 @@ with peg:
         | STATIC
         | AUTO
         | REGISTER
-        | (ATTRIBUTE, LPAR, LPAR, '[^)]*'.r is a, RPAR, RPAR) >> C.Attribute(attr=a)
+        | Attribute
+        )
+
+    Attribute = (
+        (ATTRIBUTE, LPAR, LPAR, AttributeSpecifierList is a, RPAR, RPAR) >> C.AttributeList(attr=a)
+        )
+
+    AttributeSpecifierList = (
+        AttributeSpecifier is first, ((COMMA, AttributeSpecifier is s)>>s).rep is rest) >> [first]+rest
+
+    AttributeSpecifier = (
+        (Identifier is i, ((LPAR, ArgumentExpressionList.opt is a, RPAR)>>a).opt is args) >> C.Attribute(name=i, args=args)
         )
 
     TypeSpecifier = (
@@ -90,7 +101,7 @@ with peg:
 
     EnumSpecifier = (
         ENUM, (
-            (Identifier.opt is i, LWING, EnumeratorList is e, COMMA.opt, RWING) >> C.Enumeration(name=i.name, values=e)
+            (Identifier.opt is i, LWING, EnumeratorList is e, COMMA.opt, RWING) >> C.Enumeration(name=i.name, body=e)
             | (Identifier is i) >> C.Enumeration(name=i.name)
         ) 
     ) // (lambda x: x[1])
@@ -120,6 +131,7 @@ with peg:
         | (LBRK, TypeQualifier.rep, STAR, RBRK) >> C.Array()
         | (LPAR, ParameterTypeList is a, RPAR) >> C.Arguments(args=a)
         | (LPAR, IdentifierList.opt is a, RPAR) >> C.Arguments(args=(a or []))
+        | Attribute
         ).rep is modifiers
     ) >> C.Declarator.mods(d, modifiers)
 
@@ -152,6 +164,7 @@ with peg:
         ) is d,
         ( (LBRK, ((AssignmentExpression is sz) >> C.Array(expr=sz) | STAR >> C.Array(expr=0)).opt is array, RBRK) >> array
         | (LPAR, ParameterTypeList.opt is a, RPAR) >> C.Arguments(args=a)
+        | Attribute
         ).rep is modifiers
     ) >> C.Declarator.mods(d, modifiers)
 
@@ -289,7 +302,7 @@ with peg:
     ConstantExpression = ConditionalExpression
 
     # Whitespace
-    Spacing = (WhiteSpace | LongComment | LineComment).rep
+    Spacing = (WhiteSpace | LongComment | LineComment | PreprocessorDirective).rep
     WhiteSpace = u'[ \n\r\t\u000b\u000c]'.r
     LongComment = '/*', (r'[^*]|\*[^/]'.r ).rep , '*/'
     LineComment = '//', '[^\n]*'.r
@@ -315,7 +328,7 @@ with peg:
     INLINE    = ("inline",     -IdChar, Spacing) // (lambda x: x[0])
     LONG      = ("long",       -IdChar, Spacing) // (lambda x: x[0])
     REGISTER  = ("register",   -IdChar, Spacing) // (lambda x: x[0])
-    RESTRICT  = ("restrict",   -IdChar, Spacing) // (lambda x: x[0])
+    RESTRICT  = ("restrict" | "__restrict",   -IdChar, Spacing) // (lambda x: x[0])
     RETURN    = ("return",     -IdChar, Spacing) // (lambda x: x[0])
     SHORT     = ("short",      -IdChar, Spacing) // (lambda x: x[0])
     SIGNED    = ("signed",     -IdChar, Spacing) // (lambda x: x[0])
@@ -374,6 +387,7 @@ with peg:
           | "_Imaginary"
           | "_stdcall"
           | "__declspec"
+          | "__restrict"
           | "__attribute__"), -IdChar 
         
     Identifier = (-Keyword, (IdNondigit, IdChar.rep.join).join is i, Spacing) >> C.Identifier(name=i)
@@ -406,6 +420,8 @@ with peg:
 
     StringLiteral = ('L'.opt is mod, (('"', StringChar.rep.join is val, '"', Spacing) >> val).rep1.join is val) >> C.String(value=val, mod=mod)
     StringChar = Escape | '[^"\n\\\\]'.r
+
+    PreprocessorDirective = '#[^\n]*'.r >> []
 
     LBRK       =  ("[",        Spacing ) // (lambda x: x[0])
     RBRK       =  ("]",        Spacing ) // (lambda x: x[0])
