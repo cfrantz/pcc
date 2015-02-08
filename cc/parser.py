@@ -137,7 +137,7 @@ with peg:
 
     IdentifierList = (Identifier is first, ((COMMA, Identifier is i)>>i).rep is rest) >> [first]+rest
 
-    TypeName = (SpecifierQualifierList, AbstractDeclarator.opt)
+    TypeName = (SpecifierQualifierList is q, AbstractDeclarator.opt is d) >> C.Declarator.mods(d, q)
 
     AbstractDeclarator = (
         (Pointer.opt is p, DirectAbstractDeclarator is d) >> C.Declarator.mods(d, p)
@@ -251,12 +251,12 @@ with peg:
             | (INC, UnaryExpression) >> C.PrefixOp(op=INC, operand=UnaryExpression)
             | (DEC, UnaryExpression) >> C.PrefixOp(op=DEC, operand=UnaryExpression)
             | (UnaryOperator, CastExpression) >> C.UnaryOp.init(UnaryOperator, [CastExpression])
-            | (SIZEOF, (UnaryExpression | (LPAR, TypeName, RPAR)))
+            | (SIZEOF, (UnaryExpression | (LPAR, TypeName is s, RPAR)>>s) is s) >> C.SizeOf(expr=s)
         )
 
     UnaryOperator = AND | STAR | PLUS | MINUS | TILDA | BANG
 
-    CastExpression = (((LPAR, TypeName, RPAR) >> Cast(type=Typename)).rep is casts, UnaryExpression is expr) >> C.Cast.init(expr, casts)
+    CastExpression = (((LPAR, TypeName is t, RPAR) >> t).rep is casts, UnaryExpression is expr) >> C.Cast.init(expr, casts)
 
     MultiplicativeExpression = (CastExpression is expr, ((STAR | DIV | MOD), CastExpression).rep is rest) >> C.BinOp.init(expr, rest)
 

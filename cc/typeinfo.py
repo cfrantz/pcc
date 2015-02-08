@@ -2,6 +2,7 @@ from copy import deepcopy
 import error
 import cast as C
 import symtab
+import iemit
 
 size = {
     'char': (1, 1),
@@ -22,7 +23,6 @@ def sizeof(decl):
     tsz = None
     for t in decl.type:
         if isinstance(t, C.Struct):
-            print "Trying to find", t
             tmp = symtab.struct.find(t.name)
             guess = tmp.sizeof()
             break
@@ -31,7 +31,9 @@ def sizeof(decl):
             guess = tmp.sizeof()
             break
         if t == 'array':
-            asz *= decl.array[a].expr
+            expr = decl.array[a].expr
+            val = iemit.const_eval(expr)
+            asz *= val
             a += 1
             continue
         tsz = size.get(t)
@@ -69,6 +71,14 @@ def isptr(decl):
     for t in decl.type:
         if t in ('pointer', 'array'):
             return True
+    return False
+
+def isarray(decl):
+    if 'array' in decl.type:
+        # Arrays that are function parameters are not really arrays
+        if decl.offset is not None and decl.offset < 0:
+            return False
+        return True
     return False
 
 def isimm(decl):

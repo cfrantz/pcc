@@ -34,6 +34,12 @@ class Symtab(object):
     def find(self, symbol):
         return self.tab.get(symbol)
 
+    def values(self, sortkey=None):
+        val = self.tab.values()
+        if (sortkey):
+            val.sort(key=lambda x: getattr(x, sortkey))
+        return val
+
     def alloc(self, symbol, value=None):
         if value is None:
             value = self.tab[symbol]
@@ -43,7 +49,8 @@ class Symtab(object):
         align = self.alignof(value)
         pos = (self.pos+align-1) & ~(align-1)
         value.offset = pos
-        self.pos = pos + typeinfo.sizeof(value)
+        value.szaligned = (typeinfo.sizeof(value) + align-1) & ~(align-1)
+        self.pos = pos + value.szaligned
 
     def set_align(self, type):
         self.type = type

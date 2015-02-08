@@ -68,6 +68,9 @@ def sizeof(sym):
 def isptr(sym):
     return _typehelper(sym, typeinfo.isptr)
 
+def isarray(sym):
+    return _typehelper(sym, typeinfo.isarray)
+
 def isimm(sym):
     return _typehelper(sym, typeinfo.isimm)
 
@@ -127,6 +130,17 @@ class IList(list):
                 self._checkregs(i)
                 list.append(self, i)
         return self
+
+def isconst(ilist):
+    if len(ilist)==1 and isinstance(ilist[0], Constant):
+        return True
+    return False
+
+def const_eval(expr):
+    node = emit(expr)
+    if isconst(node):
+        return node[0].val
+    error.fatal("Expecting constant expression: %r", expr)
 
 ######################################################################
 # Pseudo node for capturing state and passing it on to other emitters
@@ -199,12 +213,25 @@ def emit_String(node, ea):
     return ret
 
 @emitter
+def emit_SizeOf(node, ea):
+    ret = IList(result=tmpreg())
+    tp = C.Declarator(type=['immediate', 'int'])
+    symtab.ident.enter(ret.result, tp)
+    val = emit(node.expr, True)
+    #print "SizeOf", node.expr, val, val.result
+    ret.append(Constant(target=ret.result, val=typeinfo.sizeof(deref(val.result))))
+    return ret
+
+@emitter
 def emit_Identifier(node, ea):
     ret = IList()
     addr = tmpreg()
-    symtab.ident.enter(addr, addrof(node.name))
+    if isarray(node.name):
+        symtab.ident.enter(addr, copyof(node.name))
+    else:
+        symtab.ident.enter(addr, addrof(node.name))
     ret.append(EffectiveAddr(target=addr, symbol=node.name))
-    if ea:
+    if ea or isarray(node.name):
         ret.result = addr
     else:
         value = tmpreg()
@@ -252,7 +279,7 @@ def emit_binop(node, ea):
     lhs = emit(node.left)
     rhs = emit(node.right)
 
-    if isimm(lhs.result) and isimm(rhs.result):
+    if isconst(lhs) and isconst(rhs):
         const = True
 
     if node.op == 'sub' and isptr(lhs.result) and isptr(rhs.result):
@@ -270,6 +297,7 @@ def emit_binop(node, ea):
         _, tp = symtab.ident.find(lhs.result)
         symtab.ident.enter(ret.result, copyof(lhs.result))
         op = Add if node.op == 'add' else Sub
+        dr = deref(lhs.result)
         sz = typeinfo.sizeof(deref(lhs.result))
         rhs = emit(C.BinOp(left=node.right, op='*', right=C.Integer(value=sz)))
         ret.append(
@@ -280,6 +308,7 @@ def emit_binop(node, ea):
     elif node.op == 'add' and isptr(rhs.result):
         symtab.ident.enter(ret.result, copyof(rhs.result))
         op = Add if node.op == 'add' else Sub
+        dr = deref(rhs.result)
         sz = typeinfo.sizeof(deref(rhs.result))
         lhs = emit(C.BinOp(left=node.left, op='*', right=C.Integer(value=sz)))
         ret.append(
@@ -386,7 +415,6 @@ def emit_binop(node, ea):
 def emit_BinOp(node, ea):
     return emit_binop(node, ea)
 
-
 @emitter
 def emit_Compare(node, ea):
     return emit_binop(node, ea)
@@ -412,7 +440,7 @@ def emit_UnaryOp(node, ea):
         return code
 
     ret = IList(result=tmpreg())
-    if isimm(code.result):
+    if isconst(code):
         const = True
     else:
         ret.extend(code)
@@ -469,7 +497,6 @@ def emit_Field(node, ea):
         code = emit(node.expr, ea=True)
     else:
         code = emit(node.expr)
-    ret.extend(code)
     _, x = symtab.ident.find(code.result)
     tp = typeinfo.typeof(deref(code.result))
     if isinstance(tp, C.Struct):
@@ -485,8 +512,14 @@ def emit_Field(node, ea):
 
     tmp = tmpreg()
     symtab.ident.enter(tmp, typeinfo.addrof(field))
-    ret.append(
-        Add(target=tmp, src0=rr, src1=emit(C.Integer(value=field.offset))))
+    if isconst(code):
+        ret.append(Constant(target=tmp, val=(code[0].val + field.offset)))
+    else:
+        ret.extend(code)
+        offset = emit(C.Integer(value=field.offset))
+        ret.append(
+            offset,
+            Add(target=tmp, src0=code.result, src1=offset.result))
 
     if ea:
         ret.result = tmp
@@ -510,7 +543,7 @@ def emit_Subscript(node, ea):
 @emitter
 def emit_ConditionalOp(node, ea):
     expr = emit(node.expr)
-    if isimm(expr.result):
+    if isconst(expr):
         if expr[0].val:
             return emit(node.body)
         else:
@@ -523,6 +556,8 @@ def emit_ConditionalOp(node, ea):
 
     ret.append(IfFalse(src0=expr.result, label=condelse))
     body = emit(node.body)
+    # FIXME: make sure types of body and orelse are compatible
+    symtab.ident.enter(ret.result, copyof(body.result))
     ret.extend(body)
     ret.append(Move(target=ret.result, src0=body.result))
     ret.append(Jump(label=condend))
@@ -535,7 +570,19 @@ def emit_ConditionalOp(node, ea):
 
 @emitter
 def emit_Cast(node, ea):
-    return '(%s)%s' % (emit(node.type), emitp(node, 'value'))
+    ret = IList(result=tmpreg())
+    expr = emit(node.value)
+    # FIXME: determine if expr can be casted to type
+    #print "Cast", expr, node.type
+    symtab.ident.enter(ret.result, node.type)
+    if isconst(expr):
+        ret.append(Constant(target=ret.result, val=expr[0].val,
+            signed=typeinfo.issigned(node.type),
+            size=typeinfo.sizeof(node.type)))
+    else:
+        ret.extend(expr)
+        ret.append(Move(target=ret.result, src0=expr.result))
+    return ret
 
 @emitter
 def emit_Call(node, ea):
@@ -555,8 +602,18 @@ def emit_Call(node, ea):
         ret.append(expr)
 
     _, tp = symtab.ident.find(target)
-    symtab.ident.enter(ret.result, tp.returns)
+    symtab.ident.enter(ret.result, typeinfo.copyof(tp.returns))
     ret.append(Call(target=target, args=args, retval=ret.result))
+    return ret
+
+@emitter
+def emit_ExprList(node, ea):
+    ret = IList(result=tmpreg())
+    for b in node.body:
+        val = emit(b)
+        ret.extend(val)
+    symtab.ident.enter(ret.result, copyof(val.result))
+    ret.append(Move(target=ret.result, src0=val.result))
     return ret
 
 @emitter
@@ -646,7 +703,7 @@ def emit_If(node, ea):
             Label(name=endif))
     else:
         ret.append(Label(name=orelse))
-    return ret, ''
+    return ret
 
 @emitter
 def emit_Break(node, ea):

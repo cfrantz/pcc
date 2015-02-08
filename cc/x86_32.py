@@ -67,6 +67,13 @@ class x86inst(object):
                 args.append('%s=%r' % (k, v))
         return '%s(%s)' % (self.__class__.__name__, ', '.join(args))
 
+class Comment(x86inst):
+    _fields = ['comment']
+    def __init__(self, comment):
+        self.comment = comment
+    def __str__(self):
+        return '; %s' % self.comment
+
 class CDQ(x86inst): pass
 class RET(x86inst): pass
 
@@ -227,12 +234,16 @@ class Backend(object):
         # TODO(cfrantz) make these constants dynamic based on
         # which registers are used.
         if ofs <= 0:
-            return ofs - 20
+            ofs -= sym.szaligned
+            return ofs - 16
         else:
             return ofs + 4
 
     def spill(self, value):
         # Spill value to memory
+        if value.count == 0:
+            return
+
         error.info("spilling %s(%s) to memory", value.name, value.reg)
         if value.offset is None:
             symtab.ident.top().alloc(value.name, value)
@@ -251,10 +262,6 @@ class Backend(object):
         # the first register in the queue
         sym = self.resolve(sym)
         sym.count -= 1
-        # If a function return value is ignored, we can just
-        # skip register allocation.
-        if sym.count == 0:
-            return None
 
         # If reg is None the user wants any register
         if reg is None:
@@ -342,7 +349,7 @@ class Backend(object):
         if sym.reg:
             return self.usereg(sym)
         if sym.offset is not None:
-            return '[ebp%+d]' % self.offset(sym)
+            return 'dword [ebp%+d]' % self.offset(sym)
         error.fatal('Symbol %r not in register and has no offset', sym.name)
         return self.usereg(sym)
 
@@ -618,6 +625,7 @@ class Backend(object):
         sz = 0
         for a in inst.args:
             # FIXME: sz = (sz+sizeof(a))
+            error.info("Selecting register for argument %r", a)
             self.a(MOV(dst='[esp+%d]'%sz, src=self.usereg(a)))
             sz += 4
         self.argspc = max(self.argspc, sz)
@@ -654,8 +662,15 @@ class Backend(object):
 
         self.argspc = 0
         self.stackpatch = SUB(dst='esp', imm=0)
+        self.a(LABEL(name=inst.name))
+
+        values = symtab.ident.top().values(sortkey='offset')
+        for v in values:
+            if v.name.startswith('%') or v.offset is None:
+                continue
+            self.a(Comment('    %s: %r' % (v.name, self.offset(v.name))))
+
         self.a(
-                LABEL(name=inst.name),
                 PUSH(dst='ebp'),
                 MOV(dst='ebp', src='esp'),
                 AND(dst='esp', imm=-16),

@@ -16,6 +16,8 @@ def nasm(s):
             ret.write("%d" % n)
         else:
             if state == 0:
+                if i:
+                    ret.write(",")
                 ret.write("'")
                 state = 1
             ret.write(ch)

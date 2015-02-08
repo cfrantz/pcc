@@ -8,6 +8,7 @@
 from copy import copy
 import itertools
 from cStringIO import StringIO
+import error
 
 print_extra = False
 
@@ -136,6 +137,10 @@ class String(ConstantExpr):
     _fields = ['value', 'mod']
     _defval = ['', '']
 
+class SizeOf(ConstantExpr):
+    _fields = ['expr']
+    _defval = ['']
+
 class Array(Expr):
     _fields = ['expr']
     _defval = [0]
@@ -252,13 +257,13 @@ class ConditionalOp(Expr):
 
 class Cast(Expr):
     precedence = 14
-    _fields = ['type', 'value']
+    _fields = ['value', 'type']
     _defval = [None, None]
 
     @classmethod
     def init(cls, ex, rest):
         for r in reversed(rest):
-            kw = dict(zip(self._fields, concat(ex, r)))
+            kw = dict(zip(cls._fields, concat(ex, r)))
             ex = cls(**kw)
         return ex
 
@@ -275,7 +280,7 @@ class ExprList(Expr):
     @classmethod
     def init(cls, ex, rest):
         if rest:
-            ex = ExprList(body=[ex]+reset)
+            ex = ExprList(body=[ex]+rest)
         return ex
 
 class Statement(AST):
@@ -348,7 +353,7 @@ class Initializer(AST):
 class Declarator(Statement):
     _fields = ['name', 'type', 'array', 'args', 'returns', 'bitfield', 'initializer']
     _defval = [None, [], [], [], None, None, None]
-    _extra = {'offset':None, 'reg':None, 'count':0, 'extra':None, 'impl':False}
+    _extra = {'offset':None, 'szaligned': 0, 'reg':None, 'count':0, 'extra':None, 'impl':False}
 
     def set_initializer(self, i):
         self.initializer = i or None
@@ -399,6 +404,10 @@ class Declarator(Statement):
                 decl.returns = Declarator()
             elif isinstance(m, basestring):
                 decl.type.append(m)
+            elif isinstance(m, CompositeType):
+                decl.type.append(m)
+            else:
+                error.fatal("Don't know how to handle declmods %r", m)
         return decl
 
 class Typedef(Declarator):
