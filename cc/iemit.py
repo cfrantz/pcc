@@ -65,6 +65,9 @@ def _typehelper(sym, fn):
 def sizeof(sym):
     return _typehelper(sym, typeinfo.sizeof)
 
+def issigned(sym):
+    return _typehelper(sym, typeinfo.issigned)
+
 def isptr(sym):
     return _typehelper(sym, typeinfo.isptr)
 
@@ -223,17 +226,17 @@ def emit_SizeOf(node, ea):
 def emit_Identifier(node, ea):
     ret = IList()
     addr = tmpreg()
-    if isarray(node.name):
-        symtab.ident.enter(addr, copyof(node.name))
-    else:
-        symtab.ident.enter(addr, addrof(node.name))
+    _, tp = symtab.ident.find(node.name)
+    symtab.ident.enter(addr, typeinfo.addrof(tp))
     ret.append(EffectiveAddr(target=addr, symbol=node.name))
-    if ea or isarray(node.name):
+    if ea or typeinfo.isarray(tp):
         ret.result = addr
     else:
         value = tmpreg()
-        symtab.ident.enter(value, copyof(node.name))
-        ret.append(Load(target=value, addr=addr))
+        tp = copyof(node.name)
+        symtab.ident.enter(value, typeinfo.copyof(tp))
+        ret.append(Load(target=value, addr=addr,
+            size=typeinfo.sizeof(tp), signed=typeinfo.issigned(tp)))
         ret.result = value
     return ret
 
@@ -248,7 +251,8 @@ def emit_Assign(node, ea):
     rhs = emit(node.right)
     lhs = emit(node.left, ea=True)
     rhs.extend(lhs)
-    rhs.append(Store(addr=lhs.result, src0=rhs.result))
+    rhs.append(Store(addr=lhs.result,src0=rhs.result,
+                     size=typeinfo.sizeof(deref(lhs.result))))
     return rhs
 
 @emitter
@@ -467,7 +471,8 @@ def emit_UnaryOp(node, ea):
         if not ea:
             tp = deref(code.result)
             symtab.ident.enter(ret.result, tp)
-            ret.append(Load(target=ret.result, addr=code.result, size=typeinfo.sizeof(tp)))
+            ret.append(Load(target=ret.result, addr=code.result,
+                size=typeinfo.sizeof(tp), signed=typeinfo.issigned(tp)))
         else:
             symtab.ident.enter(ret.result, copyof(code.result))
             ret.result = code.result
@@ -521,8 +526,10 @@ def emit_Field(node, ea):
     if ea:
         ret.result = tmp
     else:
-        symtab.ident.enter(ret.result, copyof(field))
-        ret.append(Load(target=ret.result, addr=tmp))
+        tp = copyof(field)
+        symtab.ident.enter(ret.result, tp)
+        ret.append(Load(target=ret.result, addr=tmp,
+            size=typeinfo.sizeof(tp), signed=typeinfo.issigned(tp)))
     return ret
 
 @emitter
@@ -532,8 +539,10 @@ def emit_Subscript(node, ea):
         return code
     else:
         result = tmpreg()
-        symtab.ident.enter(result, deref(code.result))
-        code.append(Load(target=result, addr=code.result))
+        tp = deref(code.result)
+        symtab.ident.enter(result, tp)
+        code.append(Load(target=result, addr=code.result,
+            size=typeinfo.sizeof(tp), signed=typeinfo.issigned(tp)))
         code.result = result
         return code
 

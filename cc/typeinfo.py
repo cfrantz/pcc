@@ -44,7 +44,7 @@ def sizeof(decl):
     if guess:
         return guess*asz        
 
-    error.warn('Cannot determine size of %r', decl.name)
+    error.fatal('Cannot determine size of %r', decl.name)
     return 0
 
 def alignof(decl):
@@ -93,6 +93,7 @@ def isextern(decl):
 def deref(decl):
     d = copyof(decl)
     d.name = None
+    d.offset = None
     for i, v in enumerate(d.type):
         if v in ('pointer', 'array'):
             break
@@ -107,7 +108,13 @@ def deref(decl):
 def addrof(decl):
     d = copyof(decl)
     d.name = None
-    d.type.insert(0, 'pointer')
+    d.offset = None
+    try:
+        i = d.type.index('array')
+        d.type[i] = 'pointer'
+        d.array.pop()
+    except ValueError:
+        d.type.insert(0, 'pointer')
     return d
 
 def typeof(decl):
