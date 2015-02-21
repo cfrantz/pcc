@@ -248,6 +248,7 @@ class Backend(object):
         error.info("spilling %s(%s) to memory", value.name, value.reg)
         if value.offset is None:
             symtab.ident.top().alloc(value.name, value)
+            error.info("    allocating space: %d", self.offset(value))
         reg = value.reg
         value.reg = None
         # Increase the count, since we will reload this later
@@ -284,6 +285,9 @@ class Backend(object):
         value = self.registers.pop(reg)
         if value:
             self.spill(value)
+        if sym.count == 0:
+            self.registers[reg] = None
+            return None
         self.registers[reg] = sym
         sym.reg = reg
         return reg
@@ -464,19 +468,22 @@ class Backend(object):
         # Store a value to memory
         dst = sizeptr(inst.size, self.addr(inst.addr))
         src = self.usereg(inst.src0)
+        breg = None
         if inst.size == 1:
             if src not in self._bytereg:
                 # If the value isn't in a register with a byte name, transfer
                 # it to a better register.
-                reg = self.getreg(self._bytereg.keys(), fakesym(2))
-                self.a(MOV(dst=reg, src=src))
-                src = reg
+                breg = self.getreg(self._bytereg.keys(), fakesym(2))
+                self.a(MOV(dst=breg, src=src))
+                src = breg
             src = self._bytereg[src]
         elif inst.size == 2:
             src = self._wordreg[src]
         else:
             pass
         self.a(MOV(dst=dst, src=src))
+        if breg:
+            self.registers[breg] = None
 
     def emit_Negate(self, inst):
         # Negate (2's complement) a value
@@ -667,7 +674,7 @@ class Backend(object):
 
         values = symtab.ident.top().values(sortkey='offset')
         for v in values:
-            if v.name.startswith('%') or v.offset is None:
+            if v.offset is None:
                 continue
             self.a(Comment('    %s: %r' % (v.name, self.offset(v.name))))
 
